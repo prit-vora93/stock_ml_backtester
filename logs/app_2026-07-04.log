@@ -1,0 +1,37 @@
+2026-07-04 17:00:18 | INFO     | __main__:5 - This is INFO
+2026-07-04 17:00:18 | WARNING  | __main__:6 - This is WARNING
+2026-07-04 17:00:18 | ERROR    | __main__:7 - This is ERROR
+2026-07-04 17:00:18 | SUCCESS  | __main__:8 - This is SUCCESS
+2026-07-04 17:00:18 | CRITICAL | __main__:9 - This is CRITICAL
+2026-07-04 17:28:29 | ERROR    | api.database:522 - Database connection failed: (psycopg2.OperationalError) connection to server at "localhost" (::1), port 5432 failed: FATAL:  Ident authentication failed for user "stock_user"
+
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+2026-07-04 17:28:29 | INFO     | api.database:523 - Checklist:
+2026-07-04 17:28:29 | INFO     | api.database:524 -   1. Is PostgreSQL running?  →  sudo systemctl start postgresql
+2026-07-04 17:28:29 | INFO     | api.database:525 -   2. Is DB_PASSWORD correct in .env?
+2026-07-04 17:28:29 | INFO     | api.database:526 -   3. Does database 'stock_ml' exist?
+2026-07-04 17:28:29 | ERROR    | api.database:478 - Failed to create tables: (psycopg2.OperationalError) connection to server at "localhost" (::1), port 5432 failed: FATAL:  Ident authentication failed for user "stock_user"
+
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+2026-07-04 17:33:24 | ERROR    | api.database:522 - Database connection failed: (psycopg2.OperationalError) connection to server at "localhost" (::1), port 5432 failed: FATAL:  Ident authentication failed for user "stock_user"
+
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+2026-07-04 17:33:24 | INFO     | api.database:523 - Checklist:
+2026-07-04 17:33:24 | INFO     | api.database:524 -   1. Is PostgreSQL running?  →  sudo systemctl start postgresql
+2026-07-04 17:33:24 | INFO     | api.database:525 -   2. Is DB_PASSWORD correct in .env?
+2026-07-04 17:33:24 | INFO     | api.database:526 -   3. Does database 'stock_ml' exist?
+2026-07-04 17:33:24 | ERROR    | api.database:478 - Failed to create tables: (psycopg2.OperationalError) connection to server at "localhost" (::1), port 5432 failed: FATAL:  Ident authentication failed for user "stock_user"
+
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+2026-07-04 19:18:42 | ERROR    | api.database:522 - Database connection failed: (psycopg2.OperationalError) connection to server at "localhost" (::1), port 5432 failed: FATAL:  Ident authentication failed for user "stock_user"
+
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+2026-07-04 19:18:42 | INFO     | api.database:523 - Checklist:
+2026-07-04 19:18:42 | INFO     | api.database:524 -   1. Is PostgreSQL running?  →  sudo systemctl start postgresql
+2026-07-04 19:18:42 | INFO     | api.database:525 -   2. Is DB_PASSWORD correct in .env?
+2026-07-04 19:18:42 | INFO     | api.database:526 -   3. Does database 'stock_ml' exist?
+2026-07-04 19:18:42 | ERROR    | api.database:478 - Failed to create tables: (psycopg2.OperationalError) connection to server at "localhost" (::1), port 5432 failed: FATAL:  Ident authentication failed for user "stock_user"
+
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+2026-07-04 19:28:34 | SUCCESS  | api.database:519 - Database connection successful
+2026-07-04 19:28:34 | SUCCESS  | api.database:476 - All database tables created successfully

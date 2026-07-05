@@ -1,0 +1,20 @@
+2026-07-04 17:00:18 | ERROR    | __main__:7 - This is ERROR
+2026-07-04 17:00:18 | CRITICAL | __main__:9 - This is CRITICAL
+2026-07-04 17:28:29 | ERROR    | api.database:522 - Database connection failed: (psycopg2.OperationalError) connection to server at "localhost" (::1), port 5432 failed: FATAL:  Ident authentication failed for user "stock_user"
+
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+2026-07-04 17:28:29 | ERROR    | api.database:478 - Failed to create tables: (psycopg2.OperationalError) connection to server at "localhost" (::1), port 5432 failed: FATAL:  Ident authentication failed for user "stock_user"
+
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+2026-07-04 17:33:24 | ERROR    | api.database:522 - Database connection failed: (psycopg2.OperationalError) connection to server at "localhost" (::1), port 5432 failed: FATAL:  Ident authentication failed for user "stock_user"
+
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+2026-07-04 17:33:24 | ERROR    | api.database:478 - Failed to create tables: (psycopg2.OperationalError) connection to server at "localhost" (::1), port 5432 failed: FATAL:  Ident authentication failed for user "stock_user"
+
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+2026-07-04 19:18:42 | ERROR    | api.database:522 - Database connection failed: (psycopg2.OperationalError) connection to server at "localhost" (::1), port 5432 failed: FATAL:  Ident authentication failed for user "stock_user"
+
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+2026-07-04 19:18:42 | ERROR    | api.database:478 - Failed to create tables: (psycopg2.OperationalError) connection to server at "localhost" (::1), port 5432 failed: FATAL:  Ident authentication failed for user "stock_user"
+
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
