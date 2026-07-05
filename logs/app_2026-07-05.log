@@ -1,0 +1,165 @@
+2026-07-05 08:55:27 | SUCCESS  | api.database:519 - Database connection successful
+2026-07-05 08:55:27 | SUCCESS  | api.database:476 - All database tables created successfully
+2026-07-05 08:55:27 | INFO     | test_logger:4 - This is INFO
+2026-07-05 08:55:27 | WARNING  | test_logger:5 - This is WARNING
+2026-07-05 08:55:27 | ERROR    | test_logger:6 - This is ERROR
+2026-07-05 08:55:27 | SUCCESS  | test_logger:7 - This is SUCCESS
+2026-07-05 08:55:27 | CRITICAL | test_logger:8 - This is CRITICAL
+2026-07-05 08:57:23 | SUCCESS  | api.database:519 - Database connection successful
+2026-07-05 08:57:23 | SUCCESS  | api.database:476 - All database tables created successfully
+2026-07-05 08:57:23 | INFO     | test_logger:4 - This is INFO
+2026-07-05 08:57:23 | WARNING  | test_logger:5 - This is WARNING
+2026-07-05 08:57:23 | ERROR    | test_logger:6 - This is ERROR
+2026-07-05 08:57:23 | SUCCESS  | test_logger:7 - This is SUCCESS
+2026-07-05 08:57:23 | CRITICAL | test_logger:8 - This is CRITICAL
+2026-07-05 11:55:44 | INFO     | __main__:25 - =======================================================
+2026-07-05 11:55:44 | INFO     | __main__:26 -   Stock ML Backtester — Day 1 Setup Check
+2026-07-05 11:55:44 | INFO     | __main__:27 - =======================================================
+2026-07-05 11:55:44 | INFO     | __main__:33 - 
+📋 Check 1: Configuration
+2026-07-05 11:55:44 | INFO     | __main__:35 -   Database URL : postgresql://stock_user:StockP...
+2026-07-05 11:55:44 | INFO     | __main__:36 -   Stocks       : ['RELIANCE.NS', 'INFY.NS', 'TCS.NS', 'WIPRO.NS', 'HDFCBANK.NS']
+2026-07-05 11:55:44 | INFO     | __main__:37 -   Capital      : ₹1,000,000
+2026-07-05 11:55:44 | INFO     | __main__:38 -   Seq length   : 60 days
+2026-07-05 11:55:44 | INFO     | __main__:39 -   Models dir   : /home/prit/stock_ml_backtester/models/saved
+2026-07-05 11:55:44 | SUCCESS  | __main__:40 -   ✅ Config loaded successfully
+2026-07-05 11:55:44 | INFO     | __main__:47 - 
+🗄️  Check 2: Database Connection
+2026-07-05 11:55:44 | SUCCESS  | api.database:519 - Database connection successful
+2026-07-05 11:55:44 | INFO     | __main__:54 - 
+📊 Check 3: Create Database Tables
+2026-07-05 11:55:44 | SUCCESS  | api.database:476 - All database tables created successfully
+2026-07-05 11:55:44 | INFO     | __main__:63 - 
+🔍 Check 4: Verify Tables in Database
+2026-07-05 11:55:44 | SUCCESS  | __main__:75 -   ✅ Table 'stock_data' exists
+2026-07-05 11:55:44 | SUCCESS  | __main__:75 -   ✅ Table 'indicators' exists
+2026-07-05 11:55:44 | SUCCESS  | __main__:75 -   ✅ Table 'predictions' exists
+2026-07-05 11:55:44 | SUCCESS  | __main__:75 -   ✅ Table 'backtest_results' exists
+2026-07-05 11:55:44 | SUCCESS  | __main__:75 -   ✅ Table 'trades' exists
+2026-07-05 11:55:44 | INFO     | __main__:85 - 
+✍️  Check 5: Insert + Read Test Row
+2026-07-05 11:55:44 | SUCCESS  | __main__:105 -   ✅ Inserted row — ID: 1
+2026-07-05 11:55:44 | SUCCESS  | __main__:111 -   ✅ Read row back — Close price: ₹103.0
+2026-07-05 11:55:44 | SUCCESS  | __main__:116 -   ✅ Test row cleaned up
+2026-07-05 11:55:44 | INFO     | __main__:125 - 
+📝 Check 6: Logger
+2026-07-05 11:55:44 | INFO     | __main__:127 -    This is an INFO message
+2026-07-05 11:55:44 | WARNING  | __main__:128 -    This is a WARNING message
+2026-07-05 11:55:44 | SUCCESS  | __main__:129 -   ✅ Logger working
+2026-07-05 11:55:44 | INFO     | __main__:133 - 
+=======================================================
+2026-07-05 11:55:44 | INFO     | __main__:134 -   Results: 6 passed, 0 failed
+2026-07-05 11:55:44 | SUCCESS  | __main__:137 -   🎉 ALL CHECKS PASSED! You're ready for Day 2.
+2026-07-05 11:55:44 | INFO     | __main__:138 -   Tomorrow: data/fetcher.py — fetch real stock data!
+2026-07-05 11:55:44 | INFO     | __main__:142 - =======================================================
+2026-07-05 11:58:46 | INFO     | data.fetcher:97 - Fetching RELIANCE.NS | 2022-01-01 → 2024-01-01
+2026-07-05 11:58:47 | INFO     | data.fetcher:513 - RELIANCE.NS: Validation passed | 493 rows | NaN: 0.0% | ₹1000 – ₹1291
+2026-07-05 11:58:47 | SUCCESS  | data.fetcher:169 - Fetched RELIANCE.NS: 493 rows | 2022-01-03 → 2023-12-29 | Close range: ₹1000–₹1291
+2026-07-05 11:59:05 | INFO     | data.fetcher:237 - Fetching 5 stocks | 2020-01-01 → 2026-07-05
+2026-07-05 11:59:05 | INFO     | data.fetcher:238 - Stocks: ['RELIANCE.NS', 'INFY.NS', 'TCS.NS', 'WIPRO.NS', 'HDFCBANK.NS']
+2026-07-05 11:59:05 | INFO     | data.fetcher:239 - Estimated time: ~15s
+2026-07-05 11:59:05 | INFO     | data.fetcher:246 - [1/5] RELIANCE.NS...
+2026-07-05 11:59:05 | INFO     | data.fetcher:97 - Fetching RELIANCE.NS | 2020-01-01 → 2026-07-05
+2026-07-05 11:59:06 | INFO     | data.fetcher:513 - RELIANCE.NS: Validation passed | 1613 rows | NaN: 0.0% | ₹394 – ₹1585
+2026-07-05 11:59:06 | SUCCESS  | data.fetcher:169 - Fetched RELIANCE.NS: 1613 rows | 2020-01-01 → 2026-07-03 | Close range: ₹394–₹1585
+2026-07-05 11:59:06 | SUCCESS  | data.fetcher:252 -   ✅ RELIANCE.NS: 1613 rows
+2026-07-05 11:59:07 | INFO     | data.fetcher:246 - [2/5] INFY.NS...
+2026-07-05 11:59:07 | INFO     | data.fetcher:97 - Fetching INFY.NS | 2020-01-01 → 2026-07-05
+2026-07-05 11:59:08 | INFO     | data.fetcher:513 - INFY.NS: Validation passed | 1613 rows | NaN: 0.0% | ₹443 – ₹1901
+2026-07-05 11:59:08 | SUCCESS  | data.fetcher:169 - Fetched INFY.NS: 1613 rows | 2020-01-01 → 2026-07-03 | Close range: ₹443–₹1901
+2026-07-05 11:59:08 | SUCCESS  | data.fetcher:252 -   ✅ INFY.NS: 1613 rows
+2026-07-05 11:59:09 | INFO     | data.fetcher:246 - [3/5] TCS.NS...
+2026-07-05 11:59:09 | INFO     | data.fetcher:97 - Fetching TCS.NS | 2020-01-01 → 2026-07-05
+2026-07-05 11:59:09 | INFO     | data.fetcher:513 - TCS.NS: Validation passed | 1613 rows | NaN: 0.0% | ₹1403 – ₹4254
+2026-07-05 11:59:09 | SUCCESS  | data.fetcher:169 - Fetched TCS.NS: 1613 rows | 2020-01-01 → 2026-07-03 | Close range: ₹1403–₹4254
+2026-07-05 11:59:09 | SUCCESS  | data.fetcher:252 -   ✅ TCS.NS: 1613 rows
+2026-07-05 11:59:10 | INFO     | data.fetcher:246 - [4/5] WIPRO.NS...
+2026-07-05 11:59:10 | INFO     | data.fetcher:97 - Fetching WIPRO.NS | 2020-01-01 → 2026-07-05
+2026-07-05 11:59:11 | INFO     | data.fetcher:513 - WIPRO.NS: Validation passed | 1613 rows | NaN: 0.0% | ₹75 – ₹333
+2026-07-05 11:59:11 | SUCCESS  | data.fetcher:169 - Fetched WIPRO.NS: 1613 rows | 2020-01-01 → 2026-07-03 | Close range: ₹75–₹333
+2026-07-05 11:59:11 | SUCCESS  | data.fetcher:252 -   ✅ WIPRO.NS: 1613 rows
+2026-07-05 11:59:12 | INFO     | data.fetcher:246 - [5/5] HDFCBANK.NS...
+2026-07-05 11:59:12 | INFO     | data.fetcher:97 - Fetching HDFCBANK.NS | 2020-01-01 → 2026-07-05
+2026-07-05 11:59:13 | INFO     | data.fetcher:513 - HDFCBANK.NS: Validation passed | 1613 rows | NaN: 0.0% | ₹358 – ₹996
+2026-07-05 11:59:13 | SUCCESS  | data.fetcher:169 - Fetched HDFCBANK.NS: 1613 rows | 2020-01-01 → 2026-07-03 | Close range: ₹358–₹996
+2026-07-05 11:59:13 | SUCCESS  | data.fetcher:252 -   ✅ HDFCBANK.NS: 1613 rows
+2026-07-05 11:59:13 | INFO     | data.fetcher:268 - ──────────────────────────────────────────────────
+2026-07-05 11:59:13 | SUCCESS  | data.fetcher:269 - Done: 5 succeeded, 0 failed
+2026-07-05 11:59:13 | INFO     | data.fetcher:276 -   RELIANCE.NS     | 1613 rows | ₹1304 (latest close)
+2026-07-05 11:59:13 | INFO     | data.fetcher:276 -   INFY.NS         | 1613 rows | ₹1047 (latest close)
+2026-07-05 11:59:13 | INFO     | data.fetcher:276 -   TCS.NS          | 1613 rows | ₹2094 (latest close)
+2026-07-05 11:59:13 | INFO     | data.fetcher:276 -   WIPRO.NS        | 1613 rows | ₹176 (latest close)
+2026-07-05 11:59:13 | INFO     | data.fetcher:276 -   HDFCBANK.NS     | 1613 rows | ₹801 (latest close)
+2026-07-05 12:00:41 | INFO     | data.fetcher:97 - Fetching INFY.NS | 2026-06-25 → 2026-07-05
+2026-07-05 12:00:42 | WARNING  | data.fetcher:464 - INFY.NS: Only 7 rows. Need at least 200 for ML training. Skipping.
+2026-07-05 12:02:32 | INFO     | data.fetcher:97 - Fetching RELIANCE | 2022-01-01 → 2024-01-01
+2026-07-05 12:02:34 | WARNING  | data.fetcher:138 - No data returned for RELIANCE (attempt 1/3)
+2026-07-05 12:02:34 | INFO     | data.fetcher:143 - Retrying in 5s...
+2026-07-05 12:02:39 | WARNING  | data.fetcher:138 - No data returned for RELIANCE (attempt 2/3)
+2026-07-05 12:02:39 | INFO     | data.fetcher:143 - Retrying in 5s...
+2026-07-05 12:02:44 | WARNING  | data.fetcher:138 - No data returned for RELIANCE (attempt 3/3)
+2026-07-05 12:02:44 | ERROR    | data.fetcher:147 - All 3 attempts failed for RELIANCE
+2026-07-05 12:19:05 | INFO     | data.fetcher:97 - Fetching RELIANCE.NS | 2022-01-01 → 2024-01-01
+2026-07-05 12:19:06 | INFO     | data.fetcher:513 - RELIANCE.NS: Validation passed | 493 rows | NaN: 0.0% | ₹1000 – ₹1291
+2026-07-05 12:19:06 | SUCCESS  | data.fetcher:169 - Fetched RELIANCE.NS: 493 rows | 2022-01-03 → 2023-12-29 | Close range: ₹1000–₹1291
+2026-07-05 12:19:06 | INFO     | data.storage:71 - Saving 493 rows for RELIANCE.NS to database...
+2026-07-05 12:19:07 | SUCCESS  | data.storage:143 - RELIANCE.NS: 493 new rows saved | 0 duplicate rows skipped
+2026-07-05 12:20:58 | INFO     | data.storage:265 - Retrieved 493 rows for RELIANCE.NS | 2022-01-03 → 2023-12-29
+2026-07-05 12:21:54 | INFO     | data.fetcher:97 - Fetching RELIANCE.NS | 2022-01-01 → 2024-01-01
+2026-07-05 12:21:55 | INFO     | data.fetcher:513 - RELIANCE.NS: Validation passed | 493 rows | NaN: 0.0% | ₹1000 – ₹1291
+2026-07-05 12:21:55 | SUCCESS  | data.fetcher:169 - Fetched RELIANCE.NS: 493 rows | 2022-01-03 → 2023-12-29 | Close range: ₹1000–₹1291
+2026-07-05 12:21:55 | INFO     | data.storage:71 - Saving 493 rows for RELIANCE.NS to database...
+2026-07-05 12:21:56 | SUCCESS  | data.storage:143 - RELIANCE.NS: 0 new rows saved | 493 duplicate rows skipped
+2026-07-05 12:22:14 | INFO     | data.fetcher:237 - Fetching 5 stocks | 2020-01-01 → 2026-07-05
+2026-07-05 12:22:14 | INFO     | data.fetcher:238 - Stocks: ['RELIANCE.NS', 'INFY.NS', 'TCS.NS', 'WIPRO.NS', 'HDFCBANK.NS']
+2026-07-05 12:22:14 | INFO     | data.fetcher:239 - Estimated time: ~15s
+2026-07-05 12:22:14 | INFO     | data.fetcher:246 - [1/5] RELIANCE.NS...
+2026-07-05 12:22:14 | INFO     | data.fetcher:97 - Fetching RELIANCE.NS | 2020-01-01 → 2026-07-05
+2026-07-05 12:22:15 | INFO     | data.fetcher:513 - RELIANCE.NS: Validation passed | 1613 rows | NaN: 0.0% | ₹394 – ₹1585
+2026-07-05 12:22:15 | SUCCESS  | data.fetcher:169 - Fetched RELIANCE.NS: 1613 rows | 2020-01-01 → 2026-07-03 | Close range: ₹394–₹1585
+2026-07-05 12:22:15 | SUCCESS  | data.fetcher:252 -   ✅ RELIANCE.NS: 1613 rows
+2026-07-05 12:22:16 | INFO     | data.fetcher:246 - [2/5] INFY.NS...
+2026-07-05 12:22:16 | INFO     | data.fetcher:97 - Fetching INFY.NS | 2020-01-01 → 2026-07-05
+2026-07-05 12:22:16 | INFO     | data.fetcher:513 - INFY.NS: Validation passed | 1613 rows | NaN: 0.0% | ₹443 – ₹1901
+2026-07-05 12:22:16 | SUCCESS  | data.fetcher:169 - Fetched INFY.NS: 1613 rows | 2020-01-01 → 2026-07-03 | Close range: ₹443–₹1901
+2026-07-05 12:22:16 | SUCCESS  | data.fetcher:252 -   ✅ INFY.NS: 1613 rows
+2026-07-05 12:22:17 | INFO     | data.fetcher:246 - [3/5] TCS.NS...
+2026-07-05 12:22:17 | INFO     | data.fetcher:97 - Fetching TCS.NS | 2020-01-01 → 2026-07-05
+2026-07-05 12:22:17 | INFO     | data.fetcher:513 - TCS.NS: Validation passed | 1613 rows | NaN: 0.0% | ₹1403 – ₹4254
+2026-07-05 12:22:17 | SUCCESS  | data.fetcher:169 - Fetched TCS.NS: 1613 rows | 2020-01-01 → 2026-07-03 | Close range: ₹1403–₹4254
+2026-07-05 12:22:17 | SUCCESS  | data.fetcher:252 -   ✅ TCS.NS: 1613 rows
+2026-07-05 12:22:18 | INFO     | data.fetcher:246 - [4/5] WIPRO.NS...
+2026-07-05 12:22:18 | INFO     | data.fetcher:97 - Fetching WIPRO.NS | 2020-01-01 → 2026-07-05
+2026-07-05 12:22:19 | INFO     | data.fetcher:513 - WIPRO.NS: Validation passed | 1613 rows | NaN: 0.0% | ₹75 – ₹333
+2026-07-05 12:22:19 | SUCCESS  | data.fetcher:169 - Fetched WIPRO.NS: 1613 rows | 2020-01-01 → 2026-07-03 | Close range: ₹75–₹333
+2026-07-05 12:22:19 | SUCCESS  | data.fetcher:252 -   ✅ WIPRO.NS: 1613 rows
+2026-07-05 12:22:20 | INFO     | data.fetcher:246 - [5/5] HDFCBANK.NS...
+2026-07-05 12:22:20 | INFO     | data.fetcher:97 - Fetching HDFCBANK.NS | 2020-01-01 → 2026-07-05
+2026-07-05 12:22:20 | INFO     | data.fetcher:513 - HDFCBANK.NS: Validation passed | 1613 rows | NaN: 0.0% | ₹358 – ₹996
+2026-07-05 12:22:20 | SUCCESS  | data.fetcher:169 - Fetched HDFCBANK.NS: 1613 rows | 2020-01-01 → 2026-07-03 | Close range: ₹358–₹996
+2026-07-05 12:22:20 | SUCCESS  | data.fetcher:252 -   ✅ HDFCBANK.NS: 1613 rows
+2026-07-05 12:22:20 | INFO     | data.fetcher:268 - ──────────────────────────────────────────────────
+2026-07-05 12:22:20 | SUCCESS  | data.fetcher:269 - Done: 5 succeeded, 0 failed
+2026-07-05 12:22:20 | INFO     | data.fetcher:276 -   RELIANCE.NS     | 1613 rows | ₹1304 (latest close)
+2026-07-05 12:22:20 | INFO     | data.fetcher:276 -   INFY.NS         | 1613 rows | ₹1047 (latest close)
+2026-07-05 12:22:20 | INFO     | data.fetcher:276 -   TCS.NS          | 1613 rows | ₹2094 (latest close)
+2026-07-05 12:22:20 | INFO     | data.fetcher:276 -   WIPRO.NS        | 1613 rows | ₹176 (latest close)
+2026-07-05 12:22:20 | INFO     | data.fetcher:276 -   HDFCBANK.NS     | 1613 rows | ₹801 (latest close)
+2026-07-05 12:22:20 | INFO     | data.storage:71 - Saving 1613 rows for RELIANCE.NS to database...
+2026-07-05 12:22:24 | SUCCESS  | data.storage:143 - RELIANCE.NS: 1120 new rows saved | 493 duplicate rows skipped
+2026-07-05 12:22:24 | INFO     | data.storage:71 - Saving 1613 rows for INFY.NS to database...
+2026-07-05 12:22:26 | SUCCESS  | data.storage:143 - INFY.NS: 1613 new rows saved | 0 duplicate rows skipped
+2026-07-05 12:22:26 | INFO     | data.storage:71 - Saving 1613 rows for TCS.NS to database...
+2026-07-05 12:22:27 | SUCCESS  | data.storage:143 - TCS.NS: 1613 new rows saved | 0 duplicate rows skipped
+2026-07-05 12:22:27 | INFO     | data.storage:71 - Saving 1613 rows for WIPRO.NS to database...
+2026-07-05 12:22:29 | SUCCESS  | data.storage:143 - WIPRO.NS: 1613 new rows saved | 0 duplicate rows skipped
+2026-07-05 12:22:29 | INFO     | data.storage:71 - Saving 1613 rows for HDFCBANK.NS to database...
+2026-07-05 12:22:31 | SUCCESS  | data.storage:143 - HDFCBANK.NS: 1613 new rows saved | 0 duplicate rows skipped
+2026-07-05 12:22:31 | SUCCESS  | data.storage:314 - Saved total 7572 new rows across 5 stocks
+2026-07-05 12:22:31 | INFO     | data.storage:433 - ── Database Summary ──────────────────────────────
+2026-07-05 12:22:31 | INFO     | data.storage:446 -   HDFCBANK.NS     │ 1613 rows │ 2020-01-01 → 2026-07-03
+2026-07-05 12:22:31 | INFO     | data.storage:446 -   INFY.NS         │ 1613 rows │ 2020-01-01 → 2026-07-03
+2026-07-05 12:22:31 | INFO     | data.storage:446 -   RELIANCE.NS     │ 1613 rows │ 2020-01-01 → 2026-07-03
+2026-07-05 12:22:31 | INFO     | data.storage:446 -   TCS.NS          │ 1613 rows │ 2020-01-01 → 2026-07-03
+2026-07-05 12:22:31 | INFO     | data.storage:446 -   WIPRO.NS        │ 1613 rows │ 2020-01-01 → 2026-07-03
+2026-07-05 12:22:31 | INFO     | data.storage:453 - ── Total: 8065 rows across 5 stocks ──────────

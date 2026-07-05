@@ -1,0 +1,5 @@
+2026-07-05 08:55:27 | ERROR    | test_logger:6 - This is ERROR
+2026-07-05 08:55:27 | CRITICAL | test_logger:8 - This is CRITICAL
+2026-07-05 08:57:23 | ERROR    | test_logger:6 - This is ERROR
+2026-07-05 08:57:23 | CRITICAL | test_logger:8 - This is CRITICAL
+2026-07-05 12:02:44 | ERROR    | data.fetcher:147 - All 3 attempts failed for RELIANCE
