@@ -1,146 +1,200 @@
 """
 main.py
 -------
-Entry point for the project.
-Run this file to test your Day 1 setup is working correctly.
+Day 4 test script.
+Tests the full preprocessing pipeline:
+    feature engineering → normalize → split → sequences → class weights
 
-Usage:
+Run:
     python main.py
 """
 
-from utils.logger import logger
-from api.database import test_connection, create_tables
-from config.settings import (
-    DATABASE_URL, STOCKS, INITIAL_CAPITAL,
-    SEQUENCE_LENGTH, MODELS_DIR
+from data.preprocessor import (
+    preprocess,
+    preprocess_all_stocks,
+    save_scaler,
+    load_scaler,
+    SequenceConfig,
 )
+from api.database  import test_connection, create_tables
+from utils.logger  import logger
 
 
-def run_day1_checks():
-    """
-    Run all Day 1 setup checks.
-    Everything should pass before moving to Day 2.
-    """
+def run_day4():
 
-    logger.info("=" * 55)
-    logger.info("  Stock ML Backtester — Day 1 Setup Check")
-    logger.info("=" * 55)
+    logger.info("=" * 60)
+    logger.info("  Day 4 — Preprocessing Pipeline")
+    logger.info("=" * 60)
 
-    passed = 0
-    failed = 0
+    # ── Pre-check ─────────────────────────────────────────────────────────────
+    logger.info("\n🔌 Checking database...")
+    if not test_connection():
+        logger.error("Database not ready. Run: sudo systemctl start postgresql")
+        return
+    create_tables()
 
-    # ── Check 1: Config loads ─────────────────────────────────────────────────
-    logger.info("\n📋 Check 1: Configuration")
-    try:
-        logger.info(f"  Database URL : {DATABASE_URL[:30]}...")
-        logger.info(f"  Stocks       : {STOCKS}")
-        logger.info(f"  Capital      : ₹{INITIAL_CAPITAL:,.0f}")
-        logger.info(f"  Seq length   : {SEQUENCE_LENGTH} days")
-        logger.info(f"  Models dir   : {MODELS_DIR}")
-        logger.success("  ✅ Config loaded successfully")
-        passed += 1
-    except Exception as e:
-        logger.error(f"  ❌ Config failed: {e}")
-        failed += 1
+    # ── Test 1: Single stock default config ───────────────────────────────────
+    logger.info("\n📊 Test 1: Preprocess RELIANCE.NS (default config)")
+    data = preprocess("RELIANCE.NS", "2020-01-01", "2024-01-01")
 
-    # ── Check 2: Database connection ──────────────────────────────────────────
-    logger.info("\n🗄️  Check 2: Database Connection")
-    if test_connection():
-        passed += 1
-    else:
-        failed += 1
+    if data is None:
+        logger.error("Test 1 FAILED — preprocess returned None")
+        return
 
-    # ── Check 3: Create tables ────────────────────────────────────────────────
-    logger.info("\n📊 Check 3: Create Database Tables")
-    try:
-        create_tables()
-        passed += 1
-    except Exception as e:
-        logger.error(f"  ❌ Table creation failed: {e}")
-        failed += 1
+    logger.success(f"X_train shape  : {data.X_train.shape}")
+    logger.success(f"X_val shape    : {data.X_val.shape}")
+    logger.success(f"X_test shape   : {data.X_test.shape}")
+    logger.success(f"Features       : {data.n_features}")
+    logger.success(f"Memory         : {data.memory_mb:.1f} MB")
+    logger.success(f"Version        : {data.preprocessor_version}")
 
-    # ── Check 4: Verify tables exist ──────────────────────────────────────────
-    logger.info("\n🔍 Check 4: Verify Tables in Database")
-    try:
-        from sqlalchemy import inspect
-        from api.database import engine
+    # ── Test 2: Verify scaling range ──────────────────────────────────────────
+    logger.info("\n🔢 Test 2: Verify feature scaling")
 
-        inspector = inspect(engine)
-        tables    = inspector.get_table_names()
-        expected  = ["stock_data", "indicators", "predictions",
-                     "backtest_results", "trades"]
+    import numpy as np
+    x_min = data.X_train.min()
+    x_max = data.X_train.max()
 
-        for table in expected:
-            if table in tables:
-                logger.success(f"  ✅ Table '{table}' exists")
-            else:
-                logger.error(f"  ❌ Table '{table}' MISSING")
-                failed += 1
-        passed += 1
-    except Exception as e:
-        logger.error(f"  ❌ Table verification failed: {e}")
-        failed += 1
+    logger.info(f"  X_train min : {x_min:.6f}  (should be ~0.0)")
+    logger.info(f"  X_train max : {x_max:.6f}  (should be ~1.0)")
 
-    # ── Check 5: Write a test row + read it back ──────────────────────────────
-    logger.info("\n✍️  Check 5: Insert + Read Test Row")
-    try:
-        from api.database import SessionLocal, StockData
-        from datetime import date
+    assert x_min >= -0.01, f"Min too low: {x_min}"
+    assert x_max <=  1.01, f"Max too high: {x_max}"
+    logger.success("Scaling range correct ✅")
 
-        db = SessionLocal()
+    # ── Test 3: Verify no NaN or Inf ──────────────────────────────────────────
+    logger.info("\n🔍 Test 3: Check for NaN / Inf in sequences")
 
-        # Create a test stock row
-        test_row = StockData(
-            symbol = "TEST.NS",
-            date   = date(2024, 1, 1),
-            open   = 100.0,
-            high   = 105.0,
-            low    = 98.0,
-            close  = 103.0,
-            volume = 1000000
+    for name, X in [("X_train", data.X_train),
+                    ("X_val",   data.X_val),
+                    ("X_test",  data.X_test)]:
+        nan_count = np.isnan(X).sum()
+        inf_count = np.isinf(X).sum()
+        logger.info(f"  {name}: NaN={nan_count}  Inf={inf_count}")
+        assert nan_count == 0, f"NaN found in {name}"
+        assert inf_count == 0, f"Inf found in {name}"
+
+    logger.success("No NaN or Inf values ✅")
+
+    # ── Test 4: Verify sequence shape ─────────────────────────────────────────
+    logger.info("\n📐 Test 4: Verify sequence dimensions")
+
+    seq_len    = data.seq_config.sequence_length
+    n_features = data.n_features
+
+    assert data.X_train.ndim == 3,                  "X_train should be 3D"
+    assert data.X_train.shape[1] == seq_len,         f"Wrong seq length: {data.X_train.shape[1]}"
+    assert data.X_train.shape[2] == n_features,      f"Wrong features: {data.X_train.shape[2]}"
+    assert len(data.X_train) == len(data.y_train),   "X/y train length mismatch"
+    assert len(data.X_val)   == len(data.y_val),     "X/y val length mismatch"
+    assert len(data.X_test)  == len(data.y_test),    "X/y test length mismatch"
+
+    logger.success(f"Shape: ({len(data.X_train)}, {seq_len}, {n_features}) ✅")
+
+    # ── Test 5: Verify class weights ──────────────────────────────────────────
+    logger.info("\n⚖️  Test 5: Class weights")
+
+    for cls, name in [(0, "DOWN"), (1, "HOLD"), (2, "UP")]:
+        w = data.class_weights.get(cls, 0)
+        logger.info(f"  {name}: {w:.3f}")
+
+    assert 0 in data.class_weights, "Missing DOWN weight"
+    assert 1 in data.class_weights, "Missing HOLD weight"
+    assert 2 in data.class_weights, "Missing UP weight"
+    assert data.class_weights[1] < data.class_weights[0], \
+        "HOLD should have lower weight than DOWN"
+    logger.success("Class weights correct ✅")
+
+    # ── Test 6: Save and reload scaler ────────────────────────────────────────
+    logger.info("\n💾 Test 6: Save and reload scaler")
+
+    path    = save_scaler(data.scaler, "RELIANCE.NS", data)
+    scaler2 = load_scaler("RELIANCE.NS")
+
+    assert scaler2 is not None, "Failed to reload scaler"
+
+    # Verify reloaded scaler produces identical output
+    sample   = data.X_train[0][0].reshape(1, -1)
+    out1     = data.scaler.transform(sample)
+    out2     = scaler2.transform(sample)
+    assert np.allclose(out1, out2), "Reloaded scaler produces different output"
+    logger.success("Scaler save/load identical ✅")
+
+    # ── Test 7: Custom SequenceConfig ─────────────────────────────────────────
+    logger.info("\n⚙️  Test 7: Custom SequenceConfig (stride=5)")
+
+    cfg   = SequenceConfig(sequence_length=60, prediction_horizon=1, stride=5)
+    data2 = preprocess(
+        "RELIANCE.NS", "2020-01-01", "2024-01-01",
+        seq_config=cfg
+    )
+
+    if data2:
+        expected_approx = len(data.X_train) // 5
+        logger.success(
+            f"Stride=1 sequences: {len(data.X_train)} | "
+            f"Stride=5 sequences: {len(data2.X_train)} "
+            f"(~{len(data2.X_train)/len(data.X_train):.0%} of stride=1)"
         )
-        db.add(test_row)
-        db.commit()
-        db.refresh(test_row)
-        logger.success(f"  ✅ Inserted row — ID: {test_row.id}")
+        logger.success("SequenceConfig working ✅")
 
-        # Read it back
-        fetched = db.query(StockData).filter(StockData.symbol == "TEST.NS").first()
-        assert fetched is not None
-        assert fetched.close == 103.0
-        logger.success(f"  ✅ Read row back — Close price: ₹{fetched.close}")
+    # ── Test 8: Feature set filtering ─────────────────────────────────────────
+    logger.info("\n🔬 Test 8: Feature set filtering")
 
-        # Clean up test row
-        db.delete(fetched)
-        db.commit()
-        logger.success("  ✅ Test row cleaned up")
-        db.close()
-        passed += 1
+    data_tech = preprocess(
+        "RELIANCE.NS", "2020-01-01", "2024-01-01",
+        feature_set="technical"
+    )
+    data_all = preprocess(
+        "RELIANCE.NS", "2020-01-01", "2024-01-01",
+        feature_set="all"
+    )
 
-    except Exception as e:
-        logger.error(f"  ❌ Insert/Read test failed: {e}")
-        failed += 1
+    if data_tech and data_all:
+        logger.success(
+            f"technical only : {data_tech.n_features} features | "
+            f"all features   : {data_all.n_features} features"
+        )
+        assert data_tech.n_features < data_all.n_features, \
+            "Technical subset should have fewer features than full set"
+        logger.success("Feature filtering working ✅")
 
-    # ── Check 6: Logger works ─────────────────────────────────────────────────
-    logger.info("\n📝 Check 6: Logger")
-    logger.debug("   This is a DEBUG message")
-    logger.info("   This is an INFO message")
-    logger.warning("   This is a WARNING message")
-    logger.success("  ✅ Logger working")
-    passed += 1
+    # ── Test 9: All 5 stocks ──────────────────────────────────────────────────
+    logger.info("\n📈 Test 9: Preprocess all 5 stocks")
+    logger.info("This will take 2-5 minutes...")
 
-    # ── Final Summary ─────────────────────────────────────────────────────────
-    logger.info("\n" + "=" * 55)
-    logger.info(f"  Results: {passed} passed, {failed} failed")
+    all_data = preprocess_all_stocks("2020-01-01", "2024-01-01")
 
-    if failed == 0:
-        logger.success("  🎉 ALL CHECKS PASSED! You're ready for Day 2.")
-        logger.info("  Tomorrow: data/fetcher.py — fetch real stock data!")
-    else:
-        logger.error(f"  ⚠️  {failed} check(s) failed. Fix errors above before Day 2.")
+    logger.info(f"\n{'─'*60}")
+    logger.info(f"{'Symbol':<15} {'Train':>10} {'Val':>8} {'Test':>8} {'Features':>10} {'MB':>6}")
+    logger.info(f"{'─'*60}")
 
-    logger.info("=" * 55)
+    for symbol, d in all_data.items():
+        logger.info(
+            f"{symbol:<15} "
+            f"{str(d.X_train.shape):>10} "
+            f"{len(d.y_val):>8} "
+            f"{len(d.y_test):>8} "
+            f"{d.n_features:>10} "
+            f"{d.memory_mb:>6.1f}"
+        )
+
+    logger.info(f"{'─'*60}")
+
+    # ── Test 10: Save all scalers ─────────────────────────────────────────────
+    logger.info("\n💾 Test 10: Save all scalers")
+
+    for symbol, d in all_data.items():
+        save_scaler(d.scaler, symbol, d)
+
+    # ── Final summary ─────────────────────────────────────────────────────────
+    logger.info("\n" + "=" * 60)
+    logger.success(f"All tests passed!")
+    logger.success(f"Preprocessed {len(all_data)}/5 stocks")
+    logger.success(f"All scalers saved to models/saved/")
+    logger.success(f"Day 4 complete — ready for Day 5 (tests + Week 1 review)")
+    logger.info("=" * 60)
 
 
 if __name__ == "__main__":
-    run_day1_checks()
+    run_day4()

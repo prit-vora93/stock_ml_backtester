@@ -229,3 +229,47 @@ if __name__ == "__main__":
     print(f"  Logs     : {LOGS_DIR}")
 
     print("\n✅ settings.py loaded correctly!\n")
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ADD THESE LINES TO THE BOTTOM OF config/settings.py
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Preprocessing ─────────────────────────────────────────────────────────────
+
+# Scaler type for feature normalization
+# Options: "minmax" | "standard" | "robust" | "quantile" | "power"
+#
+# "minmax"   → scales to [0,1]  — best for LSTM (sigmoid/tanh gates)
+# "standard" → mean=0, std=1    — good for linear models
+# "robust"   → uses median/IQR  — best when price outliers exist
+# "quantile" → uniform output   — handles heavily skewed features
+# "power"    → Yeo-Johnson      — normalizes skewed distributions
+#
+# Start with "minmax" for LSTM — change later to compare results
+SCALER_TYPE = "minmax"
+
+# How many days ahead to predict
+# 1  = predict tomorrow's movement    (most common)
+# 3  = predict 3 days ahead           (medium term)
+# 5  = predict 1 week ahead           (weekly swing)
+# 10 = predict 2 weeks ahead          (position trading)
+PREDICTION_HORIZON = 1
+
+# Step size between consecutive sequences
+# 1 = every day creates a new sequence (maximum data, high overlap)
+# 5 = every 5 days creates a sequence  (less overlap, less correlated)
+# Start with 1 — change to 5 if training is too slow
+SEQUENCE_STRIDE = 1
+
+# ── Walk-Forward Validation ───────────────────────────────────────────────────
+# Used AFTER model training to test strategy robustness.
+# NOT used during model training itself.
+
+# Number of walk-forward folds
+WF_N_SPLITS   = 5
+
+# Training window per fold (rows)
+WF_TRAIN_SIZE = 200
+
+# Validation window per fold (rows)
+WF_VAL_SIZE   = 50
