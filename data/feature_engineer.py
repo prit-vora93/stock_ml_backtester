@@ -367,6 +367,8 @@ def _add_label(df: pd.DataFrame) -> pd.DataFrame:
     next_close    = close.shift(-1)
     future_return = (next_close - close) / close
 
+    df = df.copy()   # ← defragments DataFrame, eliminates PerformanceWarning
+
     df["label"] = np.where(
         future_return >  LABEL_THRESHOLD, LABEL_UP,
         np.where(
