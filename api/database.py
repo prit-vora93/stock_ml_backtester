@@ -278,6 +278,62 @@ class Indicator(Base):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# TABLE 2.5: NewsArticle
+# Stores every fetched news article, one row per (symbol, date, headline).
+#
+# Why this table exists (bug fixed):
+#   fetch_yfinance_news() only returns yfinance's last ~10 headlines and
+#   fetch_rss_news() only returns whatever is CURRENTLY in the RSS feeds —
+#   neither has a historical archive. Without persistence, every call to
+#   fetch_news_sentiment() over a multi-year range (e.g. 2020-01-01 to
+#   2024-01-01) silently filled almost every day with a fabricated neutral
+#   baseline (sentiment=0.0), since there was no real news for those dates.
+#
+#   By saving every article we ever fetch, keyed by (symbol, date,
+#   title_hash), repeated runs (e.g. a daily cron) accumulate a genuine
+#   historical archive over time instead of discarding what was fetched.
+#   This doesn't retroactively backfill news from before this table
+#   existed — that's a fundamental limit of free news sources — but it
+#   stops throwing away real data and makes future backtests over recent
+#   history increasingly accurate.
+# ─────────────────────────────────────────────────────────────────────────────
+
+class NewsArticle(Base):
+    __tablename__ = "news_articles"
+
+    id     = Column(Integer, primary_key=True, index=True)
+    symbol = Column(String(20), nullable=False, index=True)
+    date   = Column(Date,       nullable=False, index=True)
+
+    title  = Column(String(500), nullable=False)
+
+    # MD5 of the normalized headline — used for de-duplication.
+    # Two headlines that normalize to the same text (case/punctuation
+    # differences only) share a title_hash and are treated as one story.
+    title_hash = Column(String(32), nullable=False, index=True)
+
+    source        = Column(String(30), nullable=False)
+    source_weight = Column(Float,      nullable=False)
+    sentiment     = Column(Float,      nullable=False)
+    importance_score = Column(Float,   nullable=False)
+
+    # Comma-separated event category names (e.g. "earnings,guidance")
+    events = Column(String(300), default="")
+
+    created_at = Column(DateTime, server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint(
+            "symbol", "date", "title_hash",
+            name="uq_news_symbol_date_title",
+        ),
+    )
+
+    def __repr__(self):
+        return f"<NewsArticle {self.symbol} {self.date} '{self.title[:40]}'>"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # TABLE 3: Prediction
 # Stores ML model predictions for each stock day.
 # One row = predictions from all 3 models for one stock on one date.

@@ -70,9 +70,20 @@ def save_stock_data(symbol: str, df: pd.DataFrame) -> int:
     try:
         logger.info(f"Saving {len(df)} rows for {symbol} to database...")
 
-        # ── Loop through every row in the DataFrame ───────────────────────────
+        # ── Prefetch existing dates in ONE query ──────────────────────────────
+        # Bug fixed: previously this ran one db.query(...).first() PER ROW
+        # (1250 rows = 1250 round-trips just to check duplicates).
+        # A single query for all existing (symbol, date) keys, held in a
+        # Python set, gives O(1) membership checks with one round-trip total.
+
+        existing_dates = {
+            row_date for (row_date,) in
+            db.query(StockData.date).filter(StockData.symbol == symbol).all()
+        }
+
+        # ── Build all new rows first, then insert in bulk ─────────────────────
         # Each row = one trading day
-        # We insert them one by one so we can check duplicates individually
+        new_rows = []
 
         for row_date, row in df.iterrows():
 
@@ -94,16 +105,9 @@ def save_stock_data(symbol: str, df: pd.DataFrame) -> int:
             # Before inserting, check if this symbol + date already exists.
             # Our DB has a UniqueConstraint on (symbol, date) which would
             # raise an error if we try to insert a duplicate.
-            # Checking first is cleaner than catching that error.
-            #
-            # .first() returns the row if found, or None if not found.
+            # Checking against the prefetched set is a fast in-memory lookup.
 
-            already_exists = db.query(StockData).filter(
-                StockData.symbol == symbol,
-                StockData.date   == stock_date,
-            ).first()
-
-            if already_exists:
+            if stock_date in existing_dates:
                 rows_skip += 1
                 continue    # Skip this row, move to next date
 
@@ -113,7 +117,7 @@ def save_stock_data(symbol: str, df: pd.DataFrame) -> int:
             #   float() for prices (yfinance sometimes returns numpy float32)
             #   int()   for volume (yfinance sometimes returns numpy int64)
 
-            new_row = StockData(
+            new_rows.append(StockData(
                 symbol = symbol,
                 date   = stock_date,
                 open   = float(row["open"]),
@@ -121,11 +125,14 @@ def save_stock_data(symbol: str, df: pd.DataFrame) -> int:
                 low    = float(row["low"]),
                 close  = float(row["close"]),
                 volume = int(row["volume"]),
-            )
-
-            # db.add() stages the row (not saved yet)
-            db.add(new_row)
+            ))
             rows_saved += 1
+
+        # ── Insert all staged rows in ONE bulk operation ───────────────────────
+        # bulk_save_objects issues a single batched INSERT instead of N
+        # individual session.add() calls.
+        if new_rows:
+            db.bulk_save_objects(new_rows)
 
         # ── Commit all staged rows in ONE transaction ─────────────────────────
         # db.commit() is what actually writes to PostgreSQL.

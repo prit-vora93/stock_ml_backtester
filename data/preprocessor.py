@@ -414,11 +414,14 @@ def preprocess(
     logger.info(f"{'═'*60}")
 
     # ── Step 1: Build features ────────────────────────────────────────────────
+    # prediction_horizon is passed through so the label matches the horizon
+    # the sequences will actually be built for (see _build_sequences below).
     logger.info("Step 1: Building features...")
     df = build_full_features(
         symbol, start_date, end_date,
         include_sentiment=include_sentiment,
         include_macro=include_macro,
+        prediction_horizon=seq_config.prediction_horizon,
     )
     if df is None or df.empty:
         logger.error(f"Feature engineering returned empty DataFrame for {symbol}")
@@ -463,8 +466,16 @@ def preprocess(
 
     # ── Step 5: Build scaler ──────────────────────────────────────────────────
     # Pass n_train_rows so QuantileTransformer caps n_quantiles correctly.
+    # Also identify categorical/binary columns (computed from TRAIN data only,
+    # so no leakage) so quantile/power scalers don't warp 0/1 flags — see
+    # _identify_categorical_columns() and GroupedScaler below.
     logger.info(f"Step 5: Building {SCALER_TYPE} scaler...")
-    scaler = _build_scaler(SCALER_TYPE, n_train_rows=len(X_train_df))
+    categorical_idx = _identify_categorical_columns(X_train_df, feature_cols, groups)
+    scaler = _build_scaler(
+        SCALER_TYPE,
+        n_train_rows=len(X_train_df),
+        categorical_idx=categorical_idx,
+    )
 
     # ── Step 6: Fit scaler on training data only ──────────────────────────────
     logger.info("Step 6: Fitting scaler on training data only...")
@@ -848,12 +859,125 @@ def _time_split(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# PRIVATE: _identify_categorical_columns
+# Finds which feature columns are categorical/binary — used to keep them
+# out of quantile/power transforms (see GroupedScaler below).
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _identify_categorical_columns(
+    X_train:      pd.DataFrame,
+    feature_cols: list[str],
+    groups:       dict[str, list[str]],
+) -> list[int]:
+    """
+    Identifies categorical/binary column positions (indices into feature_cols).
+
+    Combines two signals:
+        1. Name-pattern group: FEATURE_GROUP_PATTERNS["categorical"]
+           (vix_regime, crude_high, vix_spike) — known by design.
+        2. Auto-detection: any column whose TRAIN-set values are all in
+           {0, 1} (or a single constant) — catches columns like the
+           event_* flags, negative_flag, positive_flag, which are binary
+           but live under the "news" name-pattern group, not "categorical".
+
+    Uses only X_train (never val/test) so this is leakage-free, matching
+    the rest of the fit-on-train-only contract in this module.
+
+    Args:
+        X_train:      Training split DataFrame (pre-scaling)
+        feature_cols: Ordered feature column names (defines index order)
+        groups:       Output of _assign_feature_groups()
+
+    Returns:
+        Sorted list of column indices (positions in feature_cols) that
+        should bypass the main scaler in favor of a dedicated [0,1] scaler.
+    """
+    named = set(groups.get("categorical", []))
+
+    auto = set()
+    for col in feature_cols:
+        vals = pd.unique(X_train[col].dropna())
+        if len(vals) == 0:
+            continue
+        if set(np.round(vals.astype(float), 6)).issubset({0.0, 1.0}):
+            auto.add(col)
+
+    categorical_cols = named | auto
+    return sorted(feature_cols.index(c) for c in categorical_cols)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CLASS: GroupedScaler
+# Wraps a primary scaler + a dedicated MinMax scaler for categorical/binary
+# columns, so quantile/power transforms don't distort 0/1 flags.
+#
+# Bug fixed:
+#   CATEGORICAL_SKIP_SCALERS was defined but never used — the module
+#   docstring claimed "per-group scaling" as a v2 improvement, but every
+#   column (including binary flags like vix_spike, event_earnings) was
+#   run through the SAME quantile/power transform as continuous features,
+#   which can map a clean 0/1 flag onto an arbitrary non-binary value.
+#
+# Sklearn-compatible: exposes fit()/transform() like any single scaler,
+# so it's a drop-in replacement everywhere PreparedData.scaler is used
+# (save_scaler/load_scaler via joblib, get_inference_sequence, tests).
+# ─────────────────────────────────────────────────────────────────────────────
+
+class GroupedScaler:
+    """
+    Fits `primary_scaler` on continuous columns and a MinMaxScaler((0,1))
+    on categorical/binary columns, reassembling output in original column
+    order on transform().
+    """
+
+    def __init__(self, primary_scaler: object, categorical_idx: list[int]):
+        self.primary_scaler = primary_scaler
+        self.categorical_idx = list(categorical_idx)
+        self.continuous_idx: list[int] = []
+        self.cat_scaler = MinMaxScaler(feature_range=(0, 1))
+
+    def fit(self, X: np.ndarray) -> "GroupedScaler":
+        n_cols = X.shape[1]
+        cat_set = set(self.categorical_idx)
+        self.continuous_idx = [i for i in range(n_cols) if i not in cat_set]
+
+        if self.continuous_idx:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                self.primary_scaler.fit(X[:, self.continuous_idx])
+        if self.categorical_idx:
+            self.cat_scaler.fit(X[:, self.categorical_idx])
+        return self
+
+    def transform(self, X: np.ndarray) -> np.ndarray:
+        out = np.empty_like(X, dtype=float)
+        if self.continuous_idx:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                out[:, self.continuous_idx] = self.primary_scaler.transform(
+                    X[:, self.continuous_idx]
+                )
+        if self.categorical_idx:
+            out[:, self.categorical_idx] = self.cat_scaler.transform(
+                X[:, self.categorical_idx]
+            )
+        return out
+
+    def fit_transform(self, X: np.ndarray) -> np.ndarray:
+        return self.fit(X).transform(X)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # PRIVATE: _build_scaler
 # Factory function — returns the right scaler based on config.
 # Changing SCALER_TYPE in settings.py switches the scaler everywhere.
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _build_scaler(scaler_type: str, n_train_rows: int = 1000) -> object:
+def _build_scaler(
+    scaler_type:     str,
+    n_train_rows:    int              = 1000,
+    categorical_idx: Optional[list[int]] = None,
+) -> object:
     """
     Scaler factory — returns unfitted scaler for the given type.
 
@@ -867,18 +991,22 @@ def _build_scaler(scaler_type: str, n_train_rows: int = 1000) -> object:
     To add a new scaler: add one entry to the dict below.
 
     Args:
-        scaler_type:   One of the supported type strings
-        n_train_rows:  Number of training rows — used to safely cap
-                       QuantileTransformer n_quantiles.
+        scaler_type:     One of the supported type strings
+        n_train_rows:    Number of training rows — used to safely cap
+                         QuantileTransformer n_quantiles.
 
-                       Bug fixed (v2.1.0):
-                       sklearn silently reduces n_quantiles when
-                       n_quantiles > n_samples, producing a warning
-                       and inconsistent behavior across dataset sizes.
-                       We cap it explicitly: n_quantiles = min(1000, n_rows).
+                         Bug fixed (v2.1.0):
+                         sklearn silently reduces n_quantiles when
+                         n_quantiles > n_samples, producing a warning
+                         and inconsistent behavior across dataset sizes.
+                         We cap it explicitly: n_quantiles = min(1000, n_rows).
+        categorical_idx: Column indices to keep out of quantile/power
+                         transforms (see GroupedScaler). Ignored for
+                         minmax/standard/robust, which are safe on
+                         0/1 columns as-is.
 
     Returns:
-        Unfitted sklearn-compatible scaler object
+        Unfitted sklearn-compatible scaler object (possibly a GroupedScaler)
     """
     # Cap quantiles to training set size — fixes silent sklearn warning
     # when dataset has fewer rows than requested quantiles (common here:
@@ -903,7 +1031,7 @@ def _build_scaler(scaler_type: str, n_train_rows: int = 1000) -> object:
             f"falling back to 'minmax'. "
             f"Valid options: {list(scalers.keys())}"
         )
-        return scalers["minmax"]
+        scaler_type = "minmax"
 
     if scaler_type == "quantile":
         logger.info(
@@ -911,7 +1039,17 @@ def _build_scaler(scaler_type: str, n_train_rows: int = 1000) -> object:
             f"{safe_quantiles} (training rows = {n_train_rows})"
         )
 
-    return scalers[scaler_type]
+    base_scaler = scalers[scaler_type]
+
+    if scaler_type in CATEGORICAL_SKIP_SCALERS and categorical_idx:
+        logger.info(
+            f"  Per-group scaling: {len(categorical_idx)} categorical/binary "
+            f"columns will use a dedicated [0,1] scaler instead of "
+            f"'{scaler_type}' (avoids distorting binary flags)"
+        )
+        return GroupedScaler(base_scaler, categorical_idx)
+
+    return base_scaler
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -978,9 +1116,19 @@ def _build_sequences(
         we use numpy's as_strided to create a VIEW of the data
         with sequence-shaped dimensions — zero copy overhead.
 
+    Label indexing (bug fixed):
+        `y` here is the already-horizon-aware label built by
+        feature_engineer._add_label(df, horizon=seq_config.prediction_horizon)
+        — row t's label already reflects the return from day t to day
+        t+horizon. So the label for a sequence ending at input row
+        (i + seq_len - 1) is simply y[i + seq_len - 1]; it must NOT be
+        shifted forward by horizon again (that would read the label of a
+        day `horizon` days past the sequence end, double-counting horizon
+        and silently pairing the wrong label with the wrong window).
+
     Args:
         X:          2D scaled array (rows, features)
-        y:          1D label array  (rows,)
+        y:          1D label array  (rows,), already horizon-aware
         seq_config: SequenceConfig with length/horizon/stride
 
     Returns:
@@ -995,13 +1143,14 @@ def _build_sequences(
     n_rows, n_features = X.shape
 
     # How many sequences can we make?
-    # Each sequence needs seq_len rows of input + horizon rows to get label
-    n_seq = (n_rows - seq_len - horizon + 1)
+    # The label is already horizon-aware (baked in upstream), so a sequence
+    # only needs seq_len rows of input — no extra rows for horizon here.
+    n_seq = (n_rows - seq_len + 1)
 
     if n_seq <= 0:
         logger.warning(
             f"Cannot build sequences: {n_rows} rows available, "
-            f"need at least {seq_len + horizon}. Returning empty arrays."
+            f"need at least {seq_len}. Returning empty arrays."
         )
         return np.array([]).reshape(0, seq_len, n_features), np.array([])
 
@@ -1039,13 +1188,13 @@ def _build_sequences(
         # .copy() converts the view to an owned array (required for safety —
         # as_strided views have no bounds checking)
         X_seq = X_view.copy()
-        y_seq = np.array([y[i + seq_len + horizon - 1] for i in indices])
+        y_seq = np.array([y[i + seq_len - 1] for i in indices])
 
     except Exception as e:
         # Fallback to simple loop if stride_tricks fails on this platform
         logger.warning(f"Stride tricks failed ({e}) — falling back to loop")
         X_seq = np.array([X[i: i + seq_len] for i in indices])
-        y_seq = np.array([y[i + seq_len + horizon - 1] for i in indices])
+        y_seq = np.array([y[i + seq_len - 1] for i in indices])
 
     logger.info(
         f"  Sequences: {X_seq.shape} "

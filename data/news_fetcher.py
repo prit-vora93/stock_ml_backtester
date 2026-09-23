@@ -44,6 +44,7 @@ import pandas as pd
 import yfinance as yf
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 
+from data.news_storage import save_news_articles, get_news_articles, get_news_coverage
 from utils.logger import logger
 
 
@@ -972,6 +973,9 @@ def fetch_news_sentiment(
     all_articles: list[dict] = []
 
     # ── Fetch from all sources ────────────────────────────────────────────────
+    # Note: both sources only ever return CURRENT/recent articles (yfinance's
+    # last ~10 items, RSS feeds' current entries) — neither has a historical
+    # archive. See archiving step below for why that matters.
     yf_articles  = fetch_yfinance_news(symbol)
     rss_articles = fetch_rss_news(symbol)
 
@@ -983,22 +987,55 @@ def fetch_news_sentiment(
         f"(yfinance: {len(yf_articles)}, RSS: {len(rss_articles)})"
     )
 
-    # ── Deduplicate ───────────────────────────────────────────────────────────
+    # ── Deduplicate freshly fetched articles ──────────────────────────────────
     clean_articles, n_dupes = _remove_duplicates(all_articles)
 
     logger.info(
-        f"After deduplication: {len(clean_articles)} articles "
+        f"After deduplication: {len(clean_articles)} fresh articles "
         f"({n_dupes} duplicates removed)"
     )
 
-    if not clean_articles:
+    # ── Archive fresh articles (bug fixed) ────────────────────────────────────
+    # Previously, freshly fetched articles were used ONCE and discarded —
+    # every multi-year preprocess() call re-fetched only ~10-50 current
+    # headlines and filled the rest of the requested range with a fabricated
+    # neutral baseline. Persisting here means repeated runs (e.g. a daily
+    # cron) accumulate a real historical archive over time instead.
+    if clean_articles:
+        save_news_articles(symbol, clean_articles)
+
+    # ── Read the full archived range back from the DB ─────────────────────────
+    # This includes the articles just saved above plus everything archived
+    # on prior runs — real coverage, not just what's live right now.
+    archived_articles = get_news_articles(symbol, start_date, end_date)
+
+    if not archived_articles:
         logger.warning(
-            f"No articles for {symbol}. "
-            f"All days will use neutral sentiment (0.0)."
+            f"No archived articles for {symbol} in this range. "
+            f"All days will use neutral sentiment (0.0) until the fetcher "
+            f"has run enough times to build up real coverage."
+        )
+
+    # ── Coverage check (bug fixed — this used to be invisible) ────────────────
+    # Tells the caller how much of the requested range has REAL news vs.
+    # fabricated neutral placeholders, instead of silently mixing the two.
+    coverage = get_news_coverage(symbol, start_date, end_date)
+    if coverage["coverage_pct"] < 0.05:
+        logger.warning(
+            f"{symbol}: only {coverage['days_with_news']}/{coverage['total_days']} "
+            f"days ({coverage['coverage_pct']:.1%}) in this range have real "
+            f"archived news. Sentiment features for the rest are neutral "
+            f"placeholders, not real signal — treat with caution for training "
+            f"over this historical range."
+        )
+    else:
+        logger.info(
+            f"{symbol}: news coverage {coverage['days_with_news']}/"
+            f"{coverage['total_days']} days ({coverage['coverage_pct']:.1%})"
         )
 
     # ── Build daily sentiment ─────────────────────────────────────────────────
-    sentiment_df = build_daily_sentiment(clean_articles, start_date, end_date)
+    sentiment_df = build_daily_sentiment(archived_articles, start_date, end_date)
 
     elapsed = time.time() - t0
     logger.success(

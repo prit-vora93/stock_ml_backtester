@@ -994,3 +994,179 @@ class TestPipelineEnd2End:
         assert len(failed) == 0, (
             f"These stocks failed preprocessing: {failed}"
         )
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# CLASS 6: TestPredictionHorizon
+# Regression tests for the prediction_horizon bug fix.
+#
+# These use purely synthetic, in-memory DataFrames (no DB, no network),
+# so they can run anywhere — including this sandbox where outbound
+# network access to Yahoo Finance / RSS feeds is blocked.
+#
+# Bug fixed: _add_label() used to always compute a next-day (1-day)
+# label via close.shift(-1) regardless of SequenceConfig.prediction_horizon,
+# and _build_sequences() independently re-shifted by `horizon` again,
+# reading the label of a day `horizon` days past the sequence end instead
+# of the horizon-aware label of the sequence's own last day.
+# ═════════════════════════════════════════════════════════════════════════════
+
+class TestPredictionHorizon:
+
+    def _linear_close_df(self, n=20):
+        """A close price series where close[t] = 100 + t, so future_return
+        over horizon h from day t is exactly h / (100 + t) — easy to verify
+        by hand and always positive (always UP)."""
+        dates = pd.date_range("2023-01-02", periods=n, freq="B")
+        return pd.DataFrame({"close": 100.0 + np.arange(n)}, index=dates)
+
+    @pytest.mark.parametrize("horizon", [1, 3, 5, 10])
+    def test_add_label_uses_correct_horizon(self, horizon):
+        """
+        future_return for row t must equal (close[t+horizon] - close[t]) / close[t],
+        not the 1-day return, whatever `horizon` is set to.
+        """
+        df = self._linear_close_df(30)
+        out = _add_label(df.copy(), horizon=horizon)
+
+        close = out["close"].values
+        expected_future_close = np.r_[close[horizon:], [np.nan] * horizon]
+        expected_return = (expected_future_close - close) / close
+
+        actual_return = out["future_return"].values
+        valid = ~np.isnan(expected_return)
+
+        assert np.allclose(actual_return[valid], expected_return[valid]), (
+            f"future_return doesn't match manual {horizon}-day calculation"
+        )
+        # Tail rows with no future data available must be NaN, not silently
+        # mislabeled as HOLD.
+        assert np.isnan(actual_return[~valid]).all()
+
+    def test_add_label_default_horizon_is_next_day(self):
+        """Default call (no horizon arg) must behave exactly like horizon=1
+        — this is the backward-compatible default used everywhere."""
+        df = self._linear_close_df(20)
+        default_out  = _add_label(df.copy())
+        explicit_out = _add_label(df.copy(), horizon=1)
+
+        pd.testing.assert_series_equal(
+            default_out["future_return"], explicit_out["future_return"]
+        )
+
+    @pytest.mark.parametrize("horizon", [1, 3, 5])
+    def test_build_sequences_label_alignment(self, horizon):
+        """
+        _build_sequences must pair a window ending at input row
+        (i + seq_len - 1) with y[i + seq_len - 1] — the horizon-aware label
+        of the window's OWN last day — never y[i + seq_len + horizon - 1],
+        which would read a different, later day's label entirely.
+        """
+        n_rows, n_features, seq_len = 30, 2, 5
+        X = np.arange(n_rows * n_features, dtype=float).reshape(n_rows, n_features)
+        y = np.arange(n_rows)   # y[t] stands in for an already horizon-aware label
+
+        cfg = SequenceConfig(sequence_length=seq_len, prediction_horizon=horizon, stride=1)
+        X_seq, y_seq = _build_sequences(X, y, cfg)
+
+        assert len(X_seq) == n_rows - seq_len + 1
+        for seq_idx, start_row in enumerate(range(len(X_seq))):
+            last_input_row = start_row + seq_len - 1
+            assert y_seq[seq_idx] == y[last_input_row], (
+                f"seq {seq_idx}: expected label of row {last_input_row} "
+                f"(={y[last_input_row]}), got {y_seq[seq_idx]}"
+            )
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# CLASS 7: TestGroupedScaler
+# Regression tests for the per-group scaling bug fix.
+#
+# Bug fixed: CATEGORICAL_SKIP_SCALERS was defined but never used — every
+# column, including binary/categorical flags, was run through the same
+# quantile/power transform as continuous features. These tests are
+# synthetic (no DB/network needed).
+# ═════════════════════════════════════════════════════════════════════════════
+
+class TestGroupedScaler:
+
+    def _mixed_train_df(self, n=200, seed=0):
+        rng = np.random.default_rng(seed)
+        return pd.DataFrame({
+            "rsi_14":          rng.uniform(0, 100, n),
+            "macd":            rng.normal(0, 5, n),
+            "vix_spike":       rng.integers(0, 2, n).astype(float),
+            "event_earnings":  rng.integers(0, 2, n).astype(float),
+            "day_of_week":     rng.integers(0, 5, n).astype(float),
+        })
+
+    def test_identifies_named_and_auto_detected_categoricals(self):
+        from data.preprocessor import _identify_categorical_columns
+
+        X_train = self._mixed_train_df()
+        feature_cols = list(X_train.columns)
+        groups = {"categorical": ["vix_spike"]}   # only the name-pattern match
+
+        idx = _identify_categorical_columns(X_train, feature_cols, groups)
+        found = {feature_cols[i] for i in idx}
+
+        # vix_spike is caught by the name pattern; event_earnings is binary
+        # but lives outside the "categorical" name group, so it must be
+        # caught by auto-detection instead.
+        assert found == {"vix_spike", "event_earnings"}
+        assert "day_of_week" not in found   # not binary (0-4), correctly excluded
+
+    @pytest.mark.parametrize("scaler_type", ["quantile", "power"])
+    def test_categorical_columns_bypass_distorting_scalers(self, scaler_type):
+        from data.preprocessor import _build_scaler, GroupedScaler
+
+        X_train = self._mixed_train_df()
+        feature_cols = list(X_train.columns)
+        groups = {"categorical": ["vix_spike"]}
+        cat_idx = [feature_cols.index(c) for c in ("vix_spike", "event_earnings")]
+
+        scaler = _build_scaler(scaler_type, n_train_rows=len(X_train), categorical_idx=cat_idx)
+        assert isinstance(scaler, GroupedScaler)
+
+        scaler.fit(X_train.values)
+        out = scaler.transform(X_train.values)
+
+        for col in ("vix_spike", "event_earnings"):
+            col_idx = feature_cols.index(col)
+            values = set(np.unique(out[:, col_idx]))
+            assert values <= {0.0, 1.0}, (
+                f"{col} was distorted by '{scaler_type}' scaler: {values}"
+            )
+
+    def test_minmax_does_not_wrap_in_grouped_scaler(self):
+        """minmax/standard/robust are safe on 0/1 columns already, so they
+        should NOT be wrapped — no behavior change for the default scaler."""
+        from data.preprocessor import _build_scaler, GroupedScaler
+
+        X_train = self._mixed_train_df()
+        feature_cols = list(X_train.columns)
+        cat_idx = [feature_cols.index("vix_spike")]
+
+        scaler = _build_scaler("minmax", n_train_rows=len(X_train), categorical_idx=cat_idx)
+        assert not isinstance(scaler, GroupedScaler)
+
+    def test_grouped_scaler_survives_pickle_round_trip(self, tmp_path):
+        """PreparedData.scaler is saved/loaded via joblib in save_scaler()/
+        load_scaler() — GroupedScaler must round-trip identically."""
+        import joblib
+        from data.preprocessor import _build_scaler
+
+        X_train = self._mixed_train_df()
+        feature_cols = list(X_train.columns)
+        cat_idx = [feature_cols.index("vix_spike")]
+
+        scaler = _build_scaler("power", n_train_rows=len(X_train), categorical_idx=cat_idx)
+        scaler.fit(X_train.values)
+        out1 = scaler.transform(X_train.values[:5])
+
+        path = str(tmp_path / "grouped_scaler.pkl")
+        joblib.dump(scaler, path)
+        loaded = joblib.load(path)
+        out2 = loaded.transform(X_train.values[:5])
+
+        assert np.allclose(out1, out2)

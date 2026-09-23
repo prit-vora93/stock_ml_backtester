@@ -40,8 +40,9 @@ def build_full_features(
     symbol:     str,
     start_date: str,
     end_date:   str,
-    include_sentiment: bool = True,
-    include_macro:     bool = True,
+    include_sentiment:  bool = True,
+    include_macro:      bool = True,
+    prediction_horizon: int  = 1,
 ) -> pd.DataFrame | None:
     """
     Builds complete feature DataFrame for one stock.
@@ -59,6 +60,9 @@ def build_full_features(
         end_date:           "YYYY-MM-DD"
         include_sentiment:  Include news sentiment features (default True)
         include_macro:      Include macro features (default True)
+        prediction_horizon: Days ahead the label should look (default 1 = next day).
+                             Bug fixed: label used to always be next-day regardless
+                             of this value — see _add_label().
 
     Returns:
         Complete DataFrame ready for ML training, or None if failed.
@@ -94,7 +98,7 @@ def build_full_features(
         df = _merge_sentiment_features(df, symbol, start_date, end_date)
 
     # ── Step 5: Add label (target variable) ──────────────────────────────────
-    df = _add_label(df)
+    df = _add_label(df, horizon=prediction_horizon)
 
     # ── Step 5.5: Defragment DataFrame ───────────────────────────────────────
     # After many .join() and column assignment operations, pandas internally
@@ -352,20 +356,30 @@ def _merge_sentiment_features(
 # Creates the target variable — what LSTM should predict
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _add_label(df: pd.DataFrame) -> pd.DataFrame:
+def _add_label(df: pd.DataFrame, horizon: int = 1) -> pd.DataFrame:
     """
-    Creates label column based on next-day price movement.
+    Creates label column based on price movement `horizon` days ahead.
 
-    UP   (2): tomorrow's close is 1%+ higher → BUY signal
-    DOWN (0): tomorrow's close is 1%+ lower  → SELL signal
-    HOLD (1): movement within ±1%            → no action
+    UP   (2): close `horizon` days ahead is 1%+ higher → BUY signal
+    DOWN (0): close `horizon` days ahead is 1%+ lower  → SELL signal
+    HOLD (1): movement within ±1%                      → no action
 
     Also stores raw future_return for backtesting analysis.
+
+    Args:
+        horizon: Days ahead to look for the label. Must match the
+                 SequenceConfig.prediction_horizon used downstream —
+                 preprocessor.preprocess() passes it through automatically.
+
+    Bug fixed:
+        Previously this always used close.shift(-1) (next-day only),
+        so SequenceConfig(prediction_horizon=5) silently trained on a
+        1-day label instead of an actual 5-day-ahead label.
     """
 
-    close         = df["close"]
-    next_close    = close.shift(-1)
-    future_return = (next_close - close) / close
+    close          = df["close"]
+    future_close   = close.shift(-horizon)
+    future_return  = (future_close - close) / close
 
     df = df.copy()   # ← defragments DataFrame, eliminates PerformanceWarning
 
