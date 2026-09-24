@@ -44,7 +44,7 @@ from data.preprocessor   import (
     preprocess, PreparedData, SequenceConfig,
     save_scaler, load_scaler,
     _validate_dataframe, _build_sequences,
-    _compute_class_weights,
+    _compute_class_weights, build_dated_sequences,
 )
 from api.database        import SessionLocal, StockData
 from config.settings     import SEQUENCE_LENGTH, STOCKS, LABEL_THRESHOLD
@@ -1076,6 +1076,36 @@ class TestPredictionHorizon:
                 f"seq {seq_idx}: expected label of row {last_input_row} "
                 f"(={y[last_input_row]}), got {y_seq[seq_idx]}"
             )
+
+    @pytest.mark.parametrize("stride", [1, 2, 5])
+    def test_build_dated_sequences_matches_build_sequences_windows(self, stride):
+        """
+        build_dated_sequences() must produce IDENTICAL X windows to
+        _build_sequences() for the same config/data (it shares the same
+        underlying windowing helper) and pair each window with the
+        calendar date of its own last input row — needed by
+        api/services.py to know which day a historical signal belongs to.
+        """
+        n_rows, n_features, seq_len = 30, 3, 5
+        X = np.arange(n_rows * n_features, dtype=float).reshape(n_rows, n_features)
+        y = np.arange(n_rows)
+        dates = pd.date_range("2023-01-02", periods=n_rows, freq="B")
+
+        cfg = SequenceConfig(sequence_length=seq_len, prediction_horizon=1, stride=stride)
+        X_seq, y_seq = _build_sequences(X, y, cfg)
+        X_seq2, dates_seq = build_dated_sequences(X, dates, cfg)
+
+        assert np.array_equal(X_seq, X_seq2)
+        assert len(dates_seq) == len(y_seq)
+        for seq_idx, start_row in enumerate(range(0, n_rows - seq_len + 1, stride)):
+            last_input_row = start_row + seq_len - 1
+            assert dates_seq[seq_idx] == dates[last_input_row]
+
+    def test_build_dated_sequences_length_mismatch_raises(self):
+        X = np.zeros((10, 2))
+        dates = pd.date_range("2023-01-02", periods=8, freq="B")
+        with pytest.raises(ValueError):
+            build_dated_sequences(X, dates, SequenceConfig(sequence_length=3))
 
 
 # ═════════════════════════════════════════════════════════════════════════════

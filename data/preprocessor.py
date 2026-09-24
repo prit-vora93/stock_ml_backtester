@@ -1137,22 +1137,51 @@ def _build_sequences(
         y_sequences: (N_seq,)
     """
 
+    X_seq, indices = _build_sequence_windows(X, seq_config)
+    seq_len = seq_config.sequence_length
+    y_seq   = np.array([y[i + seq_len - 1] for i in indices])
+
+    logger.info(
+        f"  Sequences: {X_seq.shape} "
+        f"(stride={seq_config.stride}, horizon={seq_config.prediction_horizon})"
+    )
+    return X_seq, y_seq
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PRIVATE: _build_sequence_windows
+# The X-only windowing core shared by _build_sequences() and the public
+# build_dated_sequences() — factored out so both stay in exact lockstep
+# on how windows/strides/indices are computed (only what gets paired with
+# each window — a label vs. a calendar date — differs between callers).
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _build_sequence_windows(
+    X:          np.ndarray,
+    seq_config: SequenceConfig,
+) -> tuple[np.ndarray, list[int]]:
+    """
+    Builds 3D sliding-window sequences from a 2D array.
+
+    Returns:
+        (X_sequences, indices)
+        X_sequences: (N_seq, seq_length, n_features)
+        indices:     start row index (into X) of each sequence — window i
+                     covers rows [indices[i], indices[i] + seq_len - 1].
+                     Callers pairing a window with something at its LAST
+                     row (a label, a date) use row indices[i] + seq_len - 1.
+    """
     seq_len  = seq_config.sequence_length
-    horizon  = seq_config.prediction_horizon
     stride   = seq_config.stride
     n_rows, n_features = X.shape
 
-    # How many sequences can we make?
-    # The label is already horizon-aware (baked in upstream), so a sequence
-    # only needs seq_len rows of input — no extra rows for horizon here.
-    n_seq = (n_rows - seq_len + 1)
-
+    n_seq = n_rows - seq_len + 1
     if n_seq <= 0:
         logger.warning(
             f"Cannot build sequences: {n_rows} rows available, "
             f"need at least {seq_len}. Returning empty arrays."
         )
-        return np.array([]).reshape(0, seq_len, n_features), np.array([])
+        return np.array([]).reshape(0, seq_len, n_features), []
 
     # Bug fixed (v2.1.0):
     # Previous version created ALL n_seq sequences in memory first using
@@ -1162,9 +1191,7 @@ def _build_sequences(
     # Fix: compute strided indices FIRST, then build only those sequences.
     # as_strided is now parameterised directly on strided_n_seq so the
     # view covers only the rows we actually need, nothing more.
-
-    # Only the indices we will actually keep
-    indices      = list(range(0, n_seq, stride))
+    indices       = list(range(0, n_seq, stride))
     strided_n_seq = len(indices)
 
     try:
@@ -1179,28 +1206,72 @@ def _build_sequences(
         shape   = (strided_n_seq, seq_len, n_features)
         strides = (stride * row_bytes, row_bytes, elem_bytes)
 
-        X_view = np.lib.stride_tricks.as_strided(
-            X,
-            shape   = shape,
-            strides = strides,
-        )
+        X_view = np.lib.stride_tricks.as_strided(X, shape=shape, strides=strides)
 
         # .copy() converts the view to an owned array (required for safety —
         # as_strided views have no bounds checking)
         X_seq = X_view.copy()
-        y_seq = np.array([y[i + seq_len - 1] for i in indices])
 
     except Exception as e:
         # Fallback to simple loop if stride_tricks fails on this platform
         logger.warning(f"Stride tricks failed ({e}) — falling back to loop")
         X_seq = np.array([X[i: i + seq_len] for i in indices])
-        y_seq = np.array([y[i + seq_len - 1] for i in indices])
 
-    logger.info(
-        f"  Sequences: {X_seq.shape} "
-        f"(stride={stride}, horizon={horizon})"
-    )
-    return X_seq, y_seq
+    return X_seq, indices
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PUBLIC: build_dated_sequences
+# Same windowing as _build_sequences(), but pairs each window with the
+# CALENDAR DATE of its last input row instead of a label.
+#
+# Why this exists:
+#   PreparedData only stores train/val/test date BOUNDARIES
+#   (train_start/train_end/...), not a per-sequence date array — there
+#   was no way to know which calendar date a given historical prediction
+#   belongs to. That's required to backtest: a signal has to be matched
+#   to the exact day's OHLCV bar it would have been acted on. This
+#   reuses the identical stride/window logic _build_sequences() uses
+#   (via _build_sequence_windows), so sequence N here lines up exactly
+#   with sequence N from a same-config preprocess() call on the same data.
+# ─────────────────────────────────────────────────────────────────────────────
+
+def build_dated_sequences(
+    X:          np.ndarray,
+    dates,
+    seq_config: Optional[SequenceConfig] = None,
+) -> tuple[np.ndarray, list]:
+    """
+    Builds 3D sliding-window sequences paired with the calendar date of
+    each window's last input row — the day a signal built from that
+    window would be known/tradeable on.
+
+    Args:
+        X:          2D scaled feature array (rows, features), e.g. from
+                    scaler.transform(df[feature_names].values)
+        dates:      Sequence of dates/timestamps, same length and order
+                    as X's rows (e.g. df.index)
+        seq_config: SequenceConfig (defaults to settings values)
+
+    Returns:
+        (X_sequences, dates_sequences)
+        X_sequences:     (N_seq, seq_length, n_features)
+        dates_sequences: list of length N_seq
+    """
+    if seq_config is None:
+        seq_config = SequenceConfig()
+
+    dates = list(dates)
+    if len(dates) != len(X):
+        raise ValueError(
+            f"dates ({len(dates)}) and X ({len(X)}) must be the same length"
+        )
+
+    X_seq, indices = _build_sequence_windows(X, seq_config)
+    seq_len = seq_config.sequence_length
+    dates_seq = [dates[i + seq_len - 1] for i in indices]
+
+    return X_seq, dates_seq
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1489,6 +1560,34 @@ def load_scaler(symbol: str) -> Optional[object]:
         )
 
     return scaler
+
+
+def load_scaler_metadata(symbol: str) -> Optional[dict]:
+    """
+    Loads just the scaler's metadata sidecar (feature_names, feature_count,
+    sequence_length, prediction_horizon, stride, training_config, ...) —
+    without loading the scaler object itself.
+
+    Needed anywhere that has to reconstruct how a saved model was trained
+    (e.g. api/services.py running live inference or a historical backtest):
+    load_scaler() only returns the fitted scaler, not the feature list or
+    SequenceConfig it was built with.
+
+    Args:
+        symbol: Stock symbol e.g. "RELIANCE.NS"
+
+    Returns:
+        The metadata dict saved by save_scaler(), or None if not found.
+    """
+    safe_symbol = symbol.replace(".", "_")
+    meta_path   = os.path.join(MODELS_DIR, f"scaler_{safe_symbol}_meta.json")
+
+    if not os.path.exists(meta_path):
+        logger.error(f"Scaler metadata not found: {meta_path}")
+        return None
+
+    with open(meta_path) as f:
+        return json.load(f)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

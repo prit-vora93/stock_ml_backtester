@@ -28,5 +28,10 @@ xgboost>=2.0
 # Logging
 loguru>=0.7
 
+# API
+fastapi>=0.110
+uvicorn>=0.29
+
 # Testing
 pytest>=8.0
+httpx>=0.27
