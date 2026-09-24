@@ -115,6 +115,18 @@ def save_xgboost(model, symbol: str, metadata: Optional[dict] = None) -> str:
     """
     Saves a trained XGBClassifier + metadata for a symbol.
 
+    Uses joblib (pickling the whole sklearn-wrapper object) rather than
+    xgboost's own save_model()/load_model() (its portable, tree-only JSON
+    format). That native format strips sklearn-wrapper state — on some
+    xgboost/scikit-learn combinations (e.g. xgboost 2.0.x + scikit-learn
+    >=1.6, which changed how ClassifierMixin exposes `_estimator_type`)
+    save_model() outright raises `TypeError: _estimator_type undefined`;
+    even when it doesn't, a freshly loaded model is missing attributes
+    like `n_classes_`/`classes_`, so predict_proba() breaks immediately
+    after loading. joblib pickles the complete Python object, sidestepping
+    both problems — the same approach data/preprocessor.py already uses
+    for the scaler.
+
     Args:
         model:    Trained xgboost.XGBClassifier
         symbol:   Stock symbol e.g. "RELIANCE.NS"
@@ -123,11 +135,13 @@ def save_xgboost(model, symbol: str, metadata: Optional[dict] = None) -> str:
     Returns:
         Path to the saved model file.
     """
+    import joblib
+
     safe      = _safe_symbol(symbol)
-    path      = os.path.join(MODELS_DIR, f"xgb_{safe}.json")
+    path      = os.path.join(MODELS_DIR, f"xgb_{safe}.pkl")
     meta_path = os.path.join(MODELS_DIR, f"xgb_{safe}_meta.json")
 
-    model.save_model(path)
+    joblib.dump(model, path)
     _write_meta(meta_path, symbol, "xgboost", metadata)
 
     logger.success(f"XGBoost model saved: {path}")
@@ -136,23 +150,23 @@ def save_xgboost(model, symbol: str, metadata: Optional[dict] = None) -> str:
 
 def load_xgboost(symbol: str):
     """
-    Loads a previously saved XGBoost model for a symbol.
+    Loads a previously saved XGBoost model for a symbol (see save_xgboost()
+    for why this uses joblib rather than xgboost's native model format).
 
     Returns:
         xgboost.XGBClassifier or None if not found.
     """
-    import xgboost as xgb
+    import joblib
 
     safe      = _safe_symbol(symbol)
-    path      = os.path.join(MODELS_DIR, f"xgb_{safe}.json")
+    path      = os.path.join(MODELS_DIR, f"xgb_{safe}.pkl")
     meta_path = os.path.join(MODELS_DIR, f"xgb_{safe}_meta.json")
 
     if not os.path.exists(path):
         logger.error(f"XGBoost model not found: {path}")
         return None
 
-    model = xgb.XGBClassifier()
-    model.load_model(path)
+    model = joblib.load(path)
     logger.success(f"XGBoost model loaded: {path}")
 
     meta = _read_meta(meta_path)

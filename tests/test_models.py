@@ -258,7 +258,7 @@ class TestModelSaver:
         monkeypatch.setattr(model_saver, "MODELS_DIR", str(tmp_path))
 
         path = model_saver.save_xgboost(trained_xgb, "SYN.NS", metadata={"n_features": N_FEATURES})
-        assert (tmp_path / "xgb_SYN_NS.json").exists()
+        assert (tmp_path / "xgb_SYN_NS.pkl").exists()
         assert (tmp_path / "xgb_SYN_NS_meta.json").exists()
 
         loaded = model_saver.load_xgboost("SYN.NS")
