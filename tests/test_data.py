@@ -45,6 +45,7 @@ from data.preprocessor   import (
     save_scaler, load_scaler,
     _validate_dataframe, _build_sequences,
     _compute_class_weights, build_dated_sequences,
+    _drop_low_variance_features,
 )
 from api.database        import SessionLocal, StockData
 from config.settings     import SEQUENCE_LENGTH, STOCKS, LABEL_THRESHOLD
@@ -1200,3 +1201,68 @@ class TestGroupedScaler:
         out2 = loaded.transform(X_train.values[:5])
 
         assert np.allclose(out1, out2)
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# CLASS 8: TestDropLowVarianceFeatures
+#
+# Regression tests for the "too many features for too little training
+# data" fix: with include_sentiment=True and modest history, many
+# sentiment columns are a constant neutral placeholder for whatever
+# fraction of the range has no real archived news yet (see
+# data/news_fetcher.py's coverage warning). Those columns used to only
+# get a warning (_validate_dataframe); they're now actually dropped,
+# train-only, before scaling/sequencing.
+# ═════════════════════════════════════════════════════════════════════════════
+
+class TestDropLowVarianceFeatures:
+
+    def test_drops_exactly_the_constant_columns(self):
+        n = 50
+        X_train = pd.DataFrame({
+            "rsi_14":         np.random.uniform(0, 100, n),   # real signal
+            "vix":            np.random.uniform(10, 30, n),   # real signal
+            "sentiment":      np.zeros(n),                     # constant placeholder
+            "news_count":     np.zeros(n),                     # constant placeholder
+            "event_earnings": np.zeros(n),                     # constant placeholder
+            "crude_high":     np.ones(n),                       # constant (always 1 is still constant)
+        })
+        feature_cols = list(X_train.columns)
+        groups = {
+            "technical": ["rsi_14"],
+            "macro":     ["vix", "crude_high"],
+            "news":      ["sentiment", "news_count", "event_earnings"],
+        }
+
+        kept, updated_groups, dropped = _drop_low_variance_features(X_train, feature_cols, groups)
+
+        assert set(dropped) == {"sentiment", "news_count", "event_earnings", "crude_high"}
+        assert set(kept) == {"rsi_14", "vix"}
+        assert updated_groups == {"technical": ["rsi_14"], "macro": ["vix"]}
+
+    def test_noop_when_nothing_is_constant(self):
+        X_train = pd.DataFrame({"a": np.random.rand(20), "b": np.random.rand(20)})
+        kept, groups, dropped = _drop_low_variance_features(X_train, ["a", "b"], {"g": ["a", "b"]})
+
+        assert dropped == []
+        assert kept == ["a", "b"]
+        assert groups == {"g": ["a", "b"]}
+
+    def test_all_constant_returns_empty(self):
+        X_train = pd.DataFrame({"a": np.zeros(10), "b": np.ones(10)})
+        kept, groups, dropped = _drop_low_variance_features(X_train, ["a", "b"], {"g": ["a", "b"]})
+
+        assert kept == []
+        assert set(dropped) == {"a", "b"}
+
+    def test_decision_uses_train_split_only(self):
+        """A column constant in TRAIN but varying in val/test must still be
+        dropped — and the reverse (constant only outside train) must be
+        kept — since the decision is deliberately train-only to avoid
+        leaking any structural signal from val/test into feature selection."""
+        X_train = pd.DataFrame({"only_varies_later": np.zeros(30)})
+        kept, _, dropped = _drop_low_variance_features(
+            X_train, ["only_varies_later"], {"g": ["only_varies_later"]}
+        )
+        assert dropped == ["only_varies_later"]
+        assert kept == []

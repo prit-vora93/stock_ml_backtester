@@ -464,6 +464,28 @@ def preprocess(
     test_start  = str(X_test_df.index[0].date())
     test_end    = str(X_test_df.index[-1].date())
 
+    # ── Step 4.5: Drop zero-variance features (train-only, no leakage) ────────
+    # Bug fixed: with include_sentiment=True and a modest date range, many
+    # sentiment columns are constant placeholders (0.0 / neutral) for
+    # whatever fraction of history has no real archived news yet — see
+    # data/news_fetcher.py's coverage warning. Those columns contribute
+    # nothing but still count against the features-vs-training-samples
+    # ratio, which is already tight (a 60-day sequence window eats rows
+    # fast). _validate_dataframe() only WARNED about this; this actually
+    # drops them, using ONLY the training split to decide (never val/test,
+    # matching the scaler's fit-on-train-only discipline).
+    logger.info("Step 4.5: Dropping zero-variance features (train-only)...")
+    feature_cols, groups, dropped_cols = _drop_low_variance_features(
+        X_train_df, feature_cols, groups
+    )
+    if not feature_cols:
+        logger.error(f"{symbol}: every feature was zero-variance in training data — aborting")
+        return None
+    if dropped_cols:
+        X_train_df = X_train_df[feature_cols]
+        X_val_df   = X_val_df[feature_cols]
+        X_test_df  = X_test_df[feature_cols]
+
     # ── Step 5: Build scaler ──────────────────────────────────────────────────
     # Pass n_train_rows so QuantileTransformer caps n_quantiles correctly.
     # Also identify categorical/binary columns (computed from TRAIN data only,
@@ -813,6 +835,68 @@ def _assign_feature_groups(feature_cols: list[str]) -> dict[str, list[str]]:
 
     # Remove empty groups for cleaner display
     return {g: cols for g, cols in groups.items() if cols}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PRIVATE: _drop_low_variance_features
+# Actually removes zero-variance columns instead of just warning about
+# them (see _validate_dataframe's constant-column check, which only logs).
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _drop_low_variance_features(
+    X_train: pd.DataFrame,
+    feature_cols: list[str],
+    groups: dict[str, list[str]],
+) -> tuple[list[str], dict[str, list[str]], list[str]]:
+    """
+    Drops feature columns that are constant (a single unique value) in
+    the TRAINING split — they can't teach a model anything, and every
+    one of them still counts against the features-vs-samples ratio,
+    which is already tight once a 60-day sequence window and a 70/15/15
+    split have eaten most of the rows.
+
+    Train-only by design: whether a column is constant is decided using
+    ONLY X_train, matching the fit-on-train-only discipline the scaler
+    already follows elsewhere in this module — checking val/test too
+    would leak a (small, structural) signal about the future into the
+    feature set.
+
+    Common cause in this project: with include_sentiment=True and a
+    modest date range, most sentiment columns are a constant neutral
+    placeholder for the (often large) fraction of history that has no
+    real archived news yet — see data/news_fetcher.py's coverage
+    warning. Those columns are pure dead weight until real coverage
+    builds up.
+
+    Args:
+        X_train:      Training split DataFrame (pre-scaling)
+        feature_cols: Ordered feature column names
+        groups:       Output of _assign_feature_groups(), narrowed to match
+
+    Returns:
+        (kept_feature_cols, updated_groups, dropped_cols)
+    """
+    dropped = [c for c in feature_cols if X_train[c].nunique(dropna=False) <= 1]
+
+    if not dropped:
+        return feature_cols, groups, []
+
+    kept = [c for c in feature_cols if c not in dropped]
+    dropped_set = set(dropped)
+    updated_groups = {
+        g: [c for c in cols if c not in dropped_set]
+        for g, cols in groups.items()
+    }
+    updated_groups = {g: cols for g, cols in updated_groups.items() if cols}
+
+    pct = len(dropped) / len(feature_cols)
+    log_fn = logger.warning if pct > 0.2 else logger.info
+    log_fn(
+        f"  Dropped {len(dropped)}/{len(feature_cols)} zero-variance features "
+        f"({pct:.0%}): {dropped[:8]}{'...' if len(dropped) > 8 else ''}"
+    )
+
+    return kept, updated_groups, dropped
 
 
 # ─────────────────────────────────────────────────────────────────────────────
